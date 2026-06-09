@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HOA Board Meeting System</title>
+<title>Board Meeting Manager</title>
 <style>
   /* ===== BASE ===== */
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -247,18 +247,38 @@
       <div class="card-title">🏘 Organization Settings</div>
       <div class="form-row">
         <div class="form-group">
-          <label>HOA Name</label>
-          <input type="text" id="org-name" placeholder="Association Name" oninput="updateOrgDisplay()">
+          <label>Organization Type</label>
+          <select id="org-type" onchange="applyOrganizationType(this.value)">
+            <option>HOA / Community Association</option>
+            <option>Nonprofit</option>
+            <option>Church</option>
+            <option>School / Civic Board</option>
+            <option>Custom</option>
+          </select>
         </div>
         <div class="form-group">
-          <label>Meeting Location</label>
-          <input type="text" id="meeting-location" placeholder="e.g. Community Clubhouse">
+          <label>Organization Name</label>
+          <input type="text" id="org-name" placeholder="Association Name" oninput="updateOrgDisplay()">
         </div>
       </div>
       <div class="form-row mt-8">
         <div class="form-group">
-          <label>Property Manager</label>
-          <input type="text" id="property-manager" placeholder="Property manager name">
+          <label>Meeting Location</label>
+          <input type="text" id="meeting-location" placeholder="e.g. Community Clubhouse">
+        </div>
+        <div class="form-group">
+          <label>Manager / Administrator</label>
+          <input type="text" id="property-manager" placeholder="Manager, administrator, pastor, or staff lead">
+        </div>
+      </div>
+      <div class="form-row mt-8">
+        <div class="form-group">
+          <label>Member / Seat Types</label>
+          <textarea id="board-seat-types" rows="3" placeholder="One per line, e.g. At Large Director" oninput="updateBoardSeatTypes(this.value)"></textarea>
+        </div>
+        <div class="form-group">
+          <label>Officer Roles</label>
+          <textarea id="officer-role-types" rows="3" placeholder="One per line, e.g. President" oninput="updateOfficerRoleTypes(this.value)"></textarea>
         </div>
       </div>
     </div>
@@ -311,7 +331,7 @@
         <thead>
           <tr>
             <th>Name</th>
-            <th>Board Seat</th>
+            <th>Member / Seat Type</th>
             <th>Officer Role</th>
             <th style="width:80px">Actions</th>
           </tr>
@@ -343,7 +363,7 @@
       <div class="card-title">📝 Additional Attendees</div>
       <div class="form-group">
         <label>Guests / Residents / Staff Present</label>
-        <textarea id="additional-attendees" placeholder="List names or describe (e.g. 5 residents, Jane Smith - Property Manager)"></textarea>
+        <textarea id="additional-attendees" placeholder="List names or describe (e.g. 5 residents, Jane Smith - guest speaker)"></textarea>
       </div>
     </div>
   </div>
@@ -418,12 +438,15 @@
 // STATE
 // ============================================================
 let state = {
+  orgType: 'HOA / Community Association',
   orgName: '',
   meetingDate: '',
   meetingType: 'Board of Directors Meeting',
   meetingLocation: 'HOA Boardroom',
   meetingAddress: '',
   propertyManager: '',
+  boardSeats: [],
+  officerRoles: [],
   timeCalled: '',
   timeAdjourned: '',
   additionalAttendees: '',
@@ -436,6 +459,46 @@ let state = {
 
 const DEFAULT_ORG_NAME = 'The Villages of Southport';
 
+const ORG_TEMPLATES = {
+  'HOA / Community Association': {
+    orgName: DEFAULT_ORG_NAME,
+    meetingLocation: 'HOA Boardroom',
+    boardSeats: [
+      'At Large Director',
+      'Malibu Village Director',
+      'Portsmouth Village Director',
+      'Schooner Village Director',
+      'Island Village Director',
+      'Bermuda Village Director'
+    ],
+    officerRoles: ['President', 'Vice President', 'Secretary', 'Treasurer']
+  },
+  'Nonprofit': {
+    orgName: '',
+    meetingLocation: '',
+    boardSeats: ['Board Chair', 'Board Member', 'Community Representative', 'Executive Director'],
+    officerRoles: ['President', 'Vice President', 'Secretary', 'Treasurer']
+  },
+  'Church': {
+    orgName: '',
+    meetingLocation: '',
+    boardSeats: ['Elder', 'Deacon', 'Trustee', 'Board Member', 'Pastor'],
+    officerRoles: ['Chair', 'Vice Chair', 'Secretary', 'Treasurer']
+  },
+  'School / Civic Board': {
+    orgName: '',
+    meetingLocation: '',
+    boardSeats: ['Chair', 'Vice Chair', 'Board Member', 'Community Representative', 'Staff Liaison'],
+    officerRoles: ['Chair', 'Vice Chair', 'Secretary', 'Treasurer']
+  },
+  'Custom': {
+    orgName: '',
+    meetingLocation: '',
+    boardSeats: ['Board Member'],
+    officerRoles: ['Chair', 'Vice Chair', 'Secretary', 'Treasurer']
+  }
+};
+
 const RECURRING_AGENDA = [
   { title: 'Call to Order and Certify Quorum', type: 'Procedural', notes: '', recurring: true },
   { title: 'Pledge of Allegiance', type: 'Procedural', notes: '', recurring: true },
@@ -446,22 +509,8 @@ const RECURRING_AGENDA = [
   { title: 'Adjournment', type: 'Procedural', notes: '', recurring: true }
 ];
 
-const BOARD_SEATS = [
-  'At Large Director',
-  'Malibu Village Director',
-  'Portsmouth Village Director',
-  'Schooner Village Director',
-  'Island Village Director',
-  'Bermuda Village Director'
-];
-
-const OFFICER_ROLES = [
-  '',
-  'President',
-  'Vice President',
-  'Secretary',
-  'Treasurer'
-];
+const DEFAULT_BOARD_SEATS = ORG_TEMPLATES['HOA / Community Association'].boardSeats;
+const DEFAULT_OFFICER_ROLES = ORG_TEMPLATES['HOA / Community Association'].officerRoles;
 
 // ============================================================
 // INIT
@@ -506,13 +555,57 @@ function showTab(name) {
 function updateOrgDisplay() {
   const val = document.getElementById('org-name').value;
   state.orgName = val;
-  document.getElementById('display-org-name').textContent = val || DEFAULT_ORG_NAME;
+  document.getElementById('display-org-name').textContent = val || defaultOrgName();
   persist();
 }
 
-function addRosterMember(name='', boardSeat='At Large Director', officerRole='') {
+function applyOrganizationType(type) {
+  const previousDefaultName = defaultOrgName();
+  const template = ORG_TEMPLATES[type] || ORG_TEMPLATES.Custom;
+  state.orgType = type;
+  state.boardSeats = [...template.boardSeats];
+  state.officerRoles = [...template.officerRoles];
+  if (!state.orgName || state.orgName === previousDefaultName) state.orgName = template.orgName || '';
+  if (!state.meetingLocation && template.meetingLocation) state.meetingLocation = template.meetingLocation;
+  state.roster.forEach(member => {
+    if (!state.boardSeats.includes(member.boardSeat)) {
+      member.boardSeat = state.boardSeats[0] || 'Board Member';
+    }
+    if (member.officerRole && !state.officerRoles.includes(member.officerRole)) {
+      member.officerRole = '';
+    }
+  });
+  renderAll();
+  persist();
+}
+
+function updateBoardSeatTypes(value) {
+  state.orgType = 'Custom';
+  state.boardSeats = normalizeList(value.split('\n'), ['Board Member']);
+  state.roster.forEach(member => {
+    if (!state.boardSeats.includes(member.boardSeat)) {
+      member.boardSeat = state.boardSeats[0];
+    }
+  });
+  renderAll();
+  persist();
+}
+
+function updateOfficerRoleTypes(value) {
+  state.orgType = 'Custom';
+  state.officerRoles = normalizeList(value.split('\n'), DEFAULT_OFFICER_ROLES);
+  state.roster.forEach(member => {
+    if (member.officerRole && !state.officerRoles.includes(member.officerRole)) {
+      member.officerRole = '';
+    }
+  });
+  renderAll();
+  persist();
+}
+
+function addRosterMember(name='', boardSeat='', officerRole='') {
   const id = 'mbr_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
-  state.roster.push({ id, name, boardSeat, officerRole });
+  state.roster.push({ id, name, boardSeat: boardSeat || getBoardSeats()[0] || 'Board Member', officerRole });
   if (!state.attendance[id]) state.attendance[id] = { status: 'present', timeArrived: '', timeDeparted: '' };
   renderRoster();
   renderAttendance();
@@ -538,14 +631,14 @@ function renderRoster() {
       <td><input type="text" value="${esc(m.name)}" placeholder="Full Name" oninput="updateRosterField('${m.id}','name',this.value)"></td>
       <td>
         <select oninput="updateRosterField('${m.id}','boardSeat',this.value)">
-          ${BOARD_SEATS.map(r =>
+          ${getBoardSeats().map(r =>
             `<option ${m.boardSeat===r?'selected':''}>${r}</option>`
           ).join('')}
         </select>
       </td>
       <td>
         <select oninput="updateRosterField('${m.id}','officerRole',this.value)">
-          ${OFFICER_ROLES.map(r =>
+          ${['', ...getOfficerRoles()].map(r =>
             `<option value="${esc(r)}" ${m.officerRole===r?'selected':''}>${r || 'None'}</option>`
           ).join('')}
         </select>
@@ -576,10 +669,13 @@ function updateRosterField(id, field, value) {
 function getBoardProfile() {
   syncFormValues();
   return {
-    orgName: state.orgName || DEFAULT_ORG_NAME,
+    orgType: state.orgType,
+    orgName: state.orgName || defaultOrgName(),
     meetingLocation: state.meetingLocation,
     meetingAddress: state.meetingAddress,
     propertyManager: state.propertyManager,
+    boardSeats: getBoardSeats(),
+    officerRoles: getOfficerRoles(),
     roster: state.roster.map(m => ({
       id: m.id,
       name: m.name,
@@ -595,10 +691,13 @@ function applyBoardProfile(profile) {
     return;
   }
   const oldAttendance = state.attendance || {};
+  state.orgType = profile.orgType || state.orgType || 'Custom';
   state.orgName = profile.orgName || '';
   state.meetingLocation = profile.meetingLocation || '';
   state.meetingAddress = profile.meetingAddress || '';
   state.propertyManager = profile.propertyManager || '';
+  state.boardSeats = normalizeList(profile.boardSeats, DEFAULT_BOARD_SEATS);
+  state.officerRoles = normalizeList(profile.officerRoles, DEFAULT_OFFICER_ROLES);
   state.roster = profile.roster.map(m => ({
     id: m.id || uid(),
     name: m.name || '',
@@ -616,12 +715,14 @@ function applyBoardProfile(profile) {
 }
 
 function saveBoardProfile() {
-  localStorage.setItem('hoa_board_profile', JSON.stringify(getBoardProfile()));
+  const profile = JSON.stringify(getBoardProfile());
+  localStorage.setItem('board_meeting_profile', profile);
+  localStorage.setItem('hoa_board_profile', profile);
   alert('Board profile saved.');
 }
 
 function loadBoardProfile() {
-  const saved = localStorage.getItem('hoa_board_profile');
+  const saved = localStorage.getItem('board_meeting_profile') || localStorage.getItem('hoa_board_profile');
   if (!saved) {
     alert('No saved board profile found.');
     return;
@@ -1104,7 +1205,7 @@ function renderActionItems() {
           <option value="">Assigned to...</option>
           ${state.roster.map(m=>`<option ${item.assignedTo===m.name?'selected':''}>${esc(m.name)}</option>`).join('')}
           <option ${item.assignedTo==='All Board'?'selected':''}>All Board</option>
-          <option value="Property Manager" ${item.assignedTo==='Property Manager'?'selected':''}>${esc(propertyManagerLabel())}</option>
+          <option value="Manager / Administrator" ${['Property Manager','Manager / Administrator'].includes(item.assignedTo)?'selected':''}>${esc(propertyManagerLabel())}</option>
         </select>
         <input type="date" value="${item.dueDate||''}" style="width:140px;" oninput="updateActionField('${item.id}','dueDate',this.value)">
       </div>
@@ -1119,7 +1220,7 @@ function renderActionItems() {
 function generateMinutes() {
   syncFormValues();
   document.getElementById('minutes-preview').classList.remove('agenda-print');
-  const org = state.orgName || DEFAULT_ORG_NAME;
+  const org = state.orgName || defaultOrgName();
   const date = state.meetingDate ? formatDate(state.meetingDate) : '[DATE]';
   const type = state.meetingType || 'Board of Directors Meeting';
   const location = state.meetingLocation || state.meetingAddress || '[LOCATION]';
@@ -1144,7 +1245,7 @@ function generateMinutes() {
   ).join('') : '';
 
   const alsoPresent = [
-    state.propertyManager ? `${state.propertyManager} - Property Manager` : '',
+    state.propertyManager ? `${state.propertyManager} - Manager / Administrator` : '',
     state.additionalAttendees || ''
   ].filter(Boolean).join('; ');
   const addlAttendees = alsoPresent ? `<p style="font-size:13px;margin-top:6px;"><strong>Also Present:</strong> ${esc(alsoPresent)}</p>` : '';
@@ -1180,12 +1281,12 @@ function generateMinutes() {
 
   // Action Items
   const actionHTML = state.actionItems.length ? state.actionItems.map(a =>
-    `<div class="min-action-item"><span style="flex:1;">${esc(a.text) || '[Action item]'}</span>${a.assignedTo ? `<strong>${esc(a.assignedTo)}</strong>` : ''}${a.dueDate ? ` — Due: ${formatDate(a.dueDate)}` : ''}</div>`
+    `<div class="min-action-item"><span style="flex:1;">${esc(a.text) || '[Action item]'}</span>${a.assignedTo ? `<strong>${esc(assigneeLabel(a.assignedTo))}</strong>` : ''}${a.dueDate ? ` — Due: ${formatDate(a.dueDate)}` : ''}</div>`
   ).join('') : '<p style="font-size:13px;color:#000;">No action items recorded.</p>';
 
-  // Secretary name
-  const secretary = state.roster.find(m => m.officerRole === 'Secretary');
-  const president = state.roster.find(m => m.officerRole === 'President');
+  // Officer names
+  const secretary = findOfficer(['Secretary', 'Clerk', 'Recording Secretary']);
+  const presidingOfficer = findOfficer(['President', 'Chair', 'Board Chair', 'Chairperson', 'Moderator']);
 
   const html = `
     <div class="min-org">${esc(org)}</div>
@@ -1195,7 +1296,7 @@ function generateMinutes() {
 
     <div class="min-section">
       <div class="min-section-title">Call to Order</div>
-      <p style="font-size:13px;color:#000;">The ${esc(type.toLowerCase())} of ${esc(org)} was called to order at ${timeCalled} by ${president ? esc(president.name) + ', President' : 'the presiding officer'}.</p>
+      <p style="font-size:13px;color:#000;">The ${esc(type.toLowerCase())} of ${esc(org)} was called to order at ${timeCalled} by ${presidingOfficer ? esc(officerLabel(presidingOfficer)) : 'the presiding officer'}.</p>
     </div>
 
     <div class="min-section">
@@ -1228,7 +1329,7 @@ function generateMinutes() {
 
     <div class="min-sig-block">
       <div>
-        <div class="min-sig-line">${president ? esc(president.name) + ', President' : 'President'}</div>
+        <div class="min-sig-line">${presidingOfficer ? esc(officerLabel(presidingOfficer)) : 'Presiding Officer'}</div>
       </div>
       <div>
         <div class="min-sig-line">${secretary ? esc(secretary.name) + ', Secretary' : 'Secretary'}</div>
@@ -1243,10 +1344,11 @@ function generateMinutes() {
 
 function generateAgendaPrint() {
   syncFormValues();
-  const org = state.orgName || DEFAULT_ORG_NAME;
+  const org = state.orgName || defaultOrgName();
   const date = state.meetingDate ? formatDate(state.meetingDate) : '[DATE]';
   const location = state.meetingLocation || state.meetingAddress || '[LOCATION]';
   const timeCalled = state.timeCalled ? fmt12(state.timeCalled) : '[TIME]';
+  const headerLines = organizationHeaderLines(org);
   const regularItems = state.agenda.filter(item => item.type !== 'New Business');
   const newBusinessItems = state.agenda.filter(item => item.type === 'New Business');
   const agendaList = items => items.length ? `
@@ -1268,10 +1370,9 @@ function generateAgendaPrint() {
   preview.classList.add('agenda-print');
   preview.innerHTML = `
     <div class="agenda-header">
-      <div class="agenda-org">Villages of Southport</div>
-      <div class="agenda-assoc">Homeowners Association</div>
-      <div class="agenda-address">8740 Wichita Place</div>
-      <div class="agenda-address">Orlando, Florida 32827</div>
+      ${headerLines.map((line, index) =>
+        `<div class="${index === 0 ? 'agenda-org' : index === 1 ? 'agenda-assoc' : 'agenda-address'}">${esc(line)}</div>`
+      ).join('')}
     </div>
     <div class="agenda-title-print">AGENDA</div>
     <div class="agenda-meta-table">
@@ -1305,6 +1406,7 @@ function printAgenda() {
 // PERSISTENCE
 // ============================================================
 function syncFormValues() {
+  state.orgType = document.getElementById('org-type').value;
   state.orgName = document.getElementById('org-name').value;
   state.meetingDate = document.getElementById('meeting-date').value;
   state.meetingType = document.getElementById('meeting-type').value;
@@ -1314,6 +1416,8 @@ function syncFormValues() {
   state.timeCalled = document.getElementById('time-called').value;
   state.timeAdjourned = document.getElementById('time-adjourned').value;
   state.additionalAttendees = document.getElementById('additional-attendees').value;
+  state.boardSeats = normalizeList(document.getElementById('board-seat-types').value.split('\n'), getBoardSeats());
+  state.officerRoles = normalizeList(document.getElementById('officer-role-types').value.split('\n'), getOfficerRoles());
 }
 
 function persist() {
@@ -1333,6 +1437,9 @@ function loadFromStorage() {
 }
 
 function normalizeState() {
+  const template = ORG_TEMPLATES[state.orgType] || ORG_TEMPLATES['HOA / Community Association'];
+  state.boardSeats = normalizeList(state.boardSeats, template.boardSeats || DEFAULT_BOARD_SEATS);
+  state.officerRoles = normalizeList(state.officerRoles, template.officerRoles || DEFAULT_OFFICER_ROLES);
   if (state.meetingType === 'Regular Board Meeting') {
     state.meetingType = 'Board of Directors Meeting';
   }
@@ -1341,17 +1448,34 @@ function normalizeState() {
     if (!member.boardSeat) {
       if (oldRole === 'Director / Member at Large' || oldRole === 'Member at Large' || oldRole === 'At Large Director') {
         member.boardSeat = 'At Large Director';
-      } else if (BOARD_SEATS.includes(oldRole)) {
+      } else if (getBoardSeats().includes(oldRole)) {
         member.boardSeat = oldRole;
       } else {
-        member.boardSeat = 'At Large Director';
+        member.boardSeat = getBoardSeats()[0] || 'Board Member';
       }
     }
     if (!member.officerRole) {
-      member.officerRole = OFFICER_ROLES.includes(oldRole) ? oldRole : '';
+      member.officerRole = getOfficerRoles().includes(oldRole) ? oldRole : '';
     }
+    if (!getBoardSeats().includes(member.boardSeat)) member.boardSeat = getBoardSeats()[0] || 'Board Member';
+    if (member.officerRole && !getOfficerRoles().includes(member.officerRole)) member.officerRole = '';
     delete member.role;
   });
+}
+
+function normalizeList(values, fallback) {
+  const list = (values || [])
+    .map(value => String(value || '').trim())
+    .filter(Boolean);
+  return list.length ? [...new Set(list)] : [...fallback];
+}
+
+function getBoardSeats() {
+  return normalizeList(state.boardSeats, DEFAULT_BOARD_SEATS);
+}
+
+function getOfficerRoles() {
+  return normalizeList(state.officerRoles, DEFAULT_OFFICER_ROLES);
 }
 
 function memberTitle(member) {
@@ -1379,13 +1503,42 @@ function memberTitleShort(member) {
   ].filter(Boolean).join(' / ');
 }
 
+function findOfficer(roleNames) {
+  return state.roster.find(member => roleNames.includes(member.officerRole));
+}
+
+function officerLabel(member) {
+  return [member.name, member.officerRole].filter(Boolean).join(', ');
+}
+
 function propertyManagerLabel() {
-  return state.propertyManager ? `${state.propertyManager} - Property Manager` : 'Property Manager';
+  return state.propertyManager ? `${state.propertyManager} - Manager / Administrator` : 'Manager / Administrator';
+}
+
+function assigneeLabel(value) {
+  return ['Property Manager', 'Manager / Administrator'].includes(value) ? propertyManagerLabel() : value;
+}
+
+function organizationHeaderLines(org) {
+  if (org === DEFAULT_ORG_NAME && state.orgType === 'HOA / Community Association' && !state.meetingAddress) {
+    return ['Villages of Southport', 'Homeowners Association', '8740 Wichita Place', 'Orlando, Florida 32827'];
+  }
+  const lines = [org];
+  if (state.orgType) lines.push(state.orgType);
+  if (state.meetingAddress) {
+    state.meetingAddress.split(',').map(line => line.trim()).filter(Boolean).forEach(line => lines.push(line));
+  }
+  return lines;
+}
+
+function defaultOrgName() {
+  return ORG_TEMPLATES[state.orgType]?.orgName || 'Organization Name';
 }
 
 function renderAll() {
   normalizeState();
   // populate form fields
+  document.getElementById('org-type').value = state.orgType || 'HOA / Community Association';
   document.getElementById('org-name').value = state.orgName || '';
   document.getElementById('meeting-date').value = state.meetingDate || '';
   document.getElementById('meeting-type').value = state.meetingType || 'Board of Directors Meeting';
@@ -1395,7 +1548,9 @@ function renderAll() {
   document.getElementById('time-called').value = state.timeCalled || '';
   document.getElementById('time-adjourned').value = state.timeAdjourned || '';
   document.getElementById('additional-attendees').value = state.additionalAttendees || '';
-  document.getElementById('display-org-name').textContent = state.orgName || DEFAULT_ORG_NAME;
+  document.getElementById('board-seat-types').value = getBoardSeats().join('\n');
+  document.getElementById('officer-role-types').value = getOfficerRoles().join('\n');
+  document.getElementById('display-org-name').textContent = state.orgName || defaultOrgName();
   renderRoster();
   renderAttendance();
   renderAgenda();
