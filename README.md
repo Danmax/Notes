@@ -20,12 +20,15 @@ The app can be used by HOAs, nonprofit boards, churches, civic boards, school bo
 - Unanimous vote shortcut and non-unanimous per-person vote recording.
 - Action item tracking with assignees and due dates.
 - Printable minutes with high-contrast styling for PDF or paper output.
+- Next Meeting reset that keeps organization settings, the roster, and recurring agenda items.
 
 ## How To Use
 
 Open `index.html` in a browser.
 
 All meeting data is stored in the browser's local storage unless you export it. Use the top-right Save / Load buttons to export or import a full meeting JSON file.
+
+Use **Next Meeting** after saving any needed copy of the current meeting. It clears meeting-specific attendance, notes, motions, action items, and one-time agenda items while retaining the organization setup, board roster, and recurring agenda items.
 
 ## Organization Profiles
 

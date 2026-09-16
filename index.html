@@ -226,6 +226,7 @@
       <div class="top-bar-actions">
         <button class="btn btn-ghost btn-sm" onclick="saveData()">💾 Save</button>
         <button class="btn btn-ghost btn-sm" onclick="loadData()">📂 Load</button>
+        <button class="btn btn-ghost btn-sm" onclick="resetForNextMeeting()" title="Clear this meeting's notes and start a new meeting">↻ Next Meeting</button>
         <button class="btn btn-accent btn-sm" onclick="printMinutes()">🖨 Print Minutes</button>
       </div>
     </div>
@@ -1010,7 +1011,7 @@ function markMotionUnanimous(discId, motionId) {
     motion.votes[member.id] = 'yea';
   });
   updateMotionVoteCounts(motion);
-  if (!motion.result) motion.result = 'passed';
+  motion.result = 'passed';
   renderDiscussion();
   persist();
 }
@@ -1232,17 +1233,11 @@ function generateMinutes() {
     const att = state.attendance[m.id];
     return isMemberPresent(att);
   });
-  const absent = state.roster.filter(m => state.attendance[m.id]?.status === 'absent');
-
   const attendanceHTML = present.length ? present.map(m => {
     const att = state.attendance[m.id] || {};
     const note = attendanceNote(att);
     return `<div class="min-attendance-row"><span class="min-attendance-name">${esc(m.name)}</span><span class="min-attendance-note">${esc(memberTitleShort(m))}${note}</span></div>`;
   }).join('') : '<div style="font-size:13px;color:#000;">No attendance recorded.</div>';
-
-  const absentHTML = absent.length ? absent.map(m =>
-    `<div class="min-attendance-row"><span class="min-attendance-name">${esc(m.name)}</span><span class="min-attendance-note">${esc(memberTitleShort(m))}</span></div>`
-  ).join('') : '';
 
   const alsoPresent = [
     state.propertyManager ? `${state.propertyManager} - Manager / Administrator` : '',
@@ -1253,10 +1248,14 @@ function generateMinutes() {
   // Discussion / Agenda
   const discussionHTML = state.discussion.length ? state.discussion.map((disc, i) => {
     const motionsHTML = disc.motions.map(m => {
-      const voteStr = formatMotionVoteSummary(m);
+      const unanimous = isMotionUnanimous(m);
+      const voteStr = unanimous ? '' : formatMotionVoteSummary(m);
       const memberVoteStr = formatMotionMemberVotes(m);
-      const resultClass = m.result ? `result-${m.result}` : '';
-      const resultLabel = m.result ? m.result.charAt(0).toUpperCase() + m.result.slice(1) : '';
+      const result = unanimous ? 'passed' : m.result;
+      const resultClass = result ? `result-${result}` : '';
+      const resultLabel = unanimous
+        ? 'Passed unanimously'
+        : result ? result.charAt(0).toUpperCase() + result.slice(1) : '';
       return `
         <div class="min-motion">
           <div class="min-motion-text">MOTION: ${esc(m.text) || '[Motion text not recorded]'}</div>
@@ -1302,7 +1301,6 @@ function generateMinutes() {
     <div class="min-section">
       <div class="min-section-title">Board Members Present</div>
       <div class="min-attendance-grid">${attendanceHTML}</div>
-      ${absentHTML ? `<div style="margin-top:10px;"><strong style="font-size:12px;text-transform:uppercase;color:#000;letter-spacing:.5px;">Absent</strong><div class="min-attendance-grid" style="margin-top:6px;">${absentHTML}</div></div>` : ''}
       ${addlAttendees}
     </div>
 
@@ -1590,6 +1588,35 @@ function loadData() {
     reader.readAsText(file);
   };
   input.click();
+}
+
+function resetForNextMeeting() {
+  const shouldReset = confirm(
+    'Start a new meeting? This clears the current meeting notes, attendance, motions, and action items. Use Save first if you need a copy.'
+  );
+  if (!shouldReset) return;
+
+  syncFormValues();
+  state.meetingDate = new Date().toISOString().split('T')[0];
+  state.timeCalled = '';
+  state.timeAdjourned = '';
+  state.additionalAttendees = '';
+  state.attendance = Object.fromEntries(state.roster.map(member => [
+    member.id,
+    { status: 'present', timeArrived: '', timeDeparted: '' }
+  ]));
+  state.agenda = state.agenda
+    .filter(item => item.recurring)
+    .map(item => ({ ...item, notes: '' }));
+  state.discussion = [];
+  state.actionItems = [];
+
+  renderAll();
+  persist();
+  document.getElementById('minutes-preview').innerHTML =
+    '<div class="empty-state" style="font-family:sans-serif;">Click "Generate Minutes" to compile your meeting data.</div>';
+  showTabByName('setup');
+  alert('Ready for the next meeting. Organization settings, roster, and recurring agenda items were kept.');
 }
 
 // ============================================================
